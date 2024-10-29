@@ -184,7 +184,7 @@ def find_one_cluster(
     radius_func="default",
     radius_func_sigmas_threshold=2,
     distance_matrix="euclidean",
-    max_points_in_start_radius=5,
+    max_points_in_initial_radius=5,
     preprocessor="Standard",
 ):
     """
@@ -217,7 +217,6 @@ def find_one_cluster(
             value_attribute.reshape(-1, 1)
         ).flatten()
 
-    # TODO allow for adding own distance matrix
     # Distance matrix of points
     if isinstance(distance_matrix, str):
         if distance_matrix == "euclidean":
@@ -227,7 +226,9 @@ def find_one_cluster(
                 haversine_distances(np.radians(spatial_attributes)) * 6371000 / 1000
             )  # multiply by Earth radius to get kilometers
         else:
-            raise Exception("Unknown distance metric")
+            raise Exception(
+                "Unknown input for distance_matrix. Use 'euclidean' or 'haversine'. Or provide a distance matrix."
+            )
 
     # Initialize cluster
     cluster = np.zeros(len(spatial_attributes), dtype=bool)
@@ -239,55 +240,81 @@ def find_one_cluster(
     cluster[argmax] = True
     radiating_points[argmax] = True
 
-    radius_multiplier = 1
-    # Find points added in this iteration
-    non_clustered_points = np.logical_not(cluster)
+    while True:
 
-    for i in np.nonzero(radiating_points)[0]:  # For every radiating point
-        try:
-            distance_to_closest_unclustered_point = np.min(
-                distance_matrix[i][non_clustered_points]
+        # Initialize arrays
+        new_points_mask = np.zeros(len(spatial_attributes), dtype=bool)
+        non_clustered_points_mask = np.logical_not(cluster)
+
+        radius_multiplier = 1.4
+
+        # Go through every radiating point
+        for i in np.nonzero(radiating_points)[0]:
+
+            # Find the distance to the closest point that is not in the cluster.
+            # This is the initial radius of the radiating point.
+            try:
+                distance_to_closest_nonclustered_point = np.min(
+                    distance_matrix[i][non_clustered_points_mask]
+                )
+            except:  # TODO tee tää paremmin
+                pass
+
+            # Check if there are too many clustered points in the initial radius, parametered by max_points_in_initial_radius.
+            # If there are too many, the point stops radiating.
+            nth_closest_point_index = np.min(
+                [len(distance_matrix[i]) - 1, max_points_in_initial_radius]
             )
-        except:
-            pass
-        
-        nth_closest_point_index = np.min([len(distance_matrix[i]) - 1, max_points_in_start_radius])
-        distance_to_nth_closest_point = np.partition(distance_matrix[i], nth_closest_point_index)[
-            nth_closest_point_index
-        ]
+            distance_to_nth_closest_point = np.partition(
+                distance_matrix[i], nth_closest_point_index
+            )[nth_closest_point_index]
 
-        points_in_radius = (
-            distance_matrix[i] <= distance_to_closest_unclustered_point * radius_multiplier
-        )
-        
-        # Add points_in_radius to cluster if the value is more than radius_func_sigmas_threshold
-        # TODO jatka tästä
-        points_in_radius_index = np.where(points_in_radius)[0]
-        is_value_above_threshold = value_attribute[points_in_radius_index] > radius_func_sigmas_threshold
-        points_to_add_index = points_in_radius_index[is_value_above_threshold]
-        
-        
-        # if (distance_to_closest_unclustered_point < distance_to_nth_closest_point) and (
-        #     points_in_radius.sum() != 0
-        # ):
-        #     new_points = np.logical_or(
-        #         new_points, np.logical_and(points_in_radius, non_clustered_points)
-        #     )
-        # else:
-        #     # Stop radiating
-        #     radiating_points[i] = False
+            if distance_to_closest_nonclustered_point > distance_to_nth_closest_point:
+                radiating_points[i] = False
+                continue
 
-    cluster = np.logical_or(new_points, cluster)  # Add new point to cluster
-    radiating_points = np.logical_or(
-        radiating_points, new_points
-    )  # get index of added points
+            # Find points that are in the radius of the radiating point and have value above the threshold.
+            # If there are none, the point stops radiating.
+            is_point_in_radius = (
+                distance_matrix[i]
+                <= distance_to_closest_nonclustered_point * radius_multiplier
+            )
+            is_value_above_threshold = (
+                value_attribute[is_point_in_radius] > radius_func_sigmas_threshold
+            )
+            #points_to_add = np.logical_and(is_point_in_radius, is_value_above_threshold)
+            points_to_add = np.where(is_point_in_radius)[0][is_value_above_threshold]
+            # Assuming `points_to_add` contains the indices of the points to be added
+            all_points_length = len(is_point_in_radius)  # Length of the original points array
+            points_to_add_mask = np.zeros(all_points_length, dtype=bool)  # Initialize boolean array with False
 
-    # Stop when no new points are added
-    if new_points.sum() == 0:
-        break
+            # Set the indices corresponding to `points_to_add` to True
+            points_to_add_mask[points_to_add] = True
 
 
-return cluster
+            points_to_add_non_clustered_mask = np.logical_and(points_to_add_mask, non_clustered_points_mask)
+
+            if points_to_add_non_clustered_mask.sum() == 0:
+                radiating_points[i] = False
+                continue
+
+            # Add the found points to the cluster
+            new_points_mask = np.logical_or(
+                new_points_mask,
+                np.logical_and(points_to_add_mask, non_clustered_points_mask),
+            )
+            
+
+        cluster = np.logical_or(new_points_mask, cluster)  # Add new point to cluster
+        radiating_points = np.logical_or(
+            radiating_points, new_points_mask
+        )  # get index of added points
+
+        # Stop when there are no radiating points left
+        if radiating_points.sum() == 0:
+            break
+
+    return cluster
 
 
 # # Find points around of added_points that are not already in the cluster. These are the new points.
