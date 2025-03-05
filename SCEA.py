@@ -17,7 +17,7 @@ def scea(
     distance_matrix="euclidean",
     radius_func_sigmas_threshold=2,
     max_points_in_start_radius=8,
-    local_box_size=3,
+    local_box_size=0,
     verbose=True,
 ):
     """v3.1
