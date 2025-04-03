@@ -6,6 +6,11 @@ from sklearn.metrics.pairwise import haversine_distances
 
 # ===============================================================================
 
+# This experiment didn't yield great results.
+# This is not (necessary) better than SCEA (1st version).
+# 
+
+###
 
 def scea2(
     points,
