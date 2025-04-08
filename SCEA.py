@@ -253,6 +253,10 @@ def find_one_cluster_v31(
         not_old_points = np.logical_not(cluster)
         new_points = np.zeros(len(points), dtype=bool)  # initialize array with Falses
 
+        # If there are no points left to add, break
+        if not_old_points.sum() == 0:
+            break
+
         # Find points added in this iteration
         for i in np.nonzero(radiating_points)[0]:
             try:
