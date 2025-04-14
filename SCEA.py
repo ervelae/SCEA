@@ -259,12 +259,15 @@ def find_one_cluster_v31(
 
         # Find points added in this iteration
         for i in np.nonzero(radiating_points)[0]:
-            try:
-                radius_of_closest_point_not_in_cluster = np.min(
-                    distance_matrix[i][not_old_points]
-                )
-            except:
-                pass
+            # try:
+            #    radius_of_closest_point_not_in_cluster = np.min(
+            #        distance_matrix[i][not_old_points]
+            #    )
+            # except:
+            #    pass
+            radius_of_closest_point_not_in_cluster = np.min(
+                distance_matrix[i][not_old_points]
+            )
             min_index = np.min(
                 [len(distance_matrix[i]) - 1, max_points_in_start_radius]
             )
