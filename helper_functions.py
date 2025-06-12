@@ -1,15 +1,15 @@
 import numpy as np
 import pandas as pd
-import SCEA
+#import SCEA
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-import cmcrameri.cm as cmc
-from matplotlib import colormaps
-from tqdm import tqdm
-import datetime
-import os
-import sys
-from pathlib import Path
+#from matplotlib.patches import Polygon
+#import cmcrameri.cm as cmc
+#from matplotlib import colormaps
+#from tqdm import tqdm
+#import datetime
+#import os
+#import sys
+#from pathlib import Path
 
 
 
@@ -34,126 +34,166 @@ def classification_outcomes(clusters, labels, reutrn_counts=False):
         )
     return is_true_positive, is_false_positive, is_true_negative, is_false_negative
 
+
 def calculate_metrics_for_multiclusters(
     clusters: np.ndarray,
     labels: np.ndarray,
     verbose: bool = False,
+    thresh_precision: float = 0.5,
+    thresh_recall: float = 0.5,
 ) -> tuple:
-    """
-    Returns the
-        - F1 score in general
-        - F1 score for each true cluster
-        - Number of unique found clusters in each true cluster
-        - How many found clusters are (partly) in a true cluster
-        - How many are not
-        - Average and median size of each true found cluster
-        - Average and median size of each false found cluster
-        - Precision in general
-        - Recall in general
+    """ TODO elaborate
+    Calculate various metrics for multi-cluster evaluation.
+    Parameters:
+    - clusters: np.ndarray
+    - labels: np.ndarray
+    - verbose: bool
+    - thresh_precision: float
+    - thresh_recall: float
+    Returns:
+    - dict
+        Dictionary containing various metrics.
     """
 
-    # Initialize a list to store the f1 scores for each true cluster
-    f1_scores = []
-    n_found_clusters_in_true_cluster = []
+    # Each cluster is a unique label int > 0
     unique_found_clusters = np.unique(clusters[clusters > 0])
-    true_found_clusters = np.unique(clusters[(labels > 0) & (clusters > 0)])
-    false_found_clusters = unique_found_clusters[
-        ~np.isin(unique_found_clusters, true_found_clusters)
-    ]
+
+    # Calculating the pixel-wise recall for each true cluster
+    # Initialize
+    pixelwise_recall_per_true_cluster = np.zeros(labels.max(), dtype=float)
+    n_found_clusters_per_true_cluster = np.zeros(labels.max(), dtype=int)
 
     # Iterate over each true cluster
     for true_label in np.unique(labels):
         if true_label == 0:
             continue  # Skip the background label
+        
+        # Pixel-wise recall for this true cluster
+        clusters_in_true_label = clusters[labels == true_label]
+        pixelwise_tp = np.sum(clusters_in_true_label > 0)
+        pixelwise_fp = np.sum(clusters_in_true_label == 0)
+        pixelwise_recall = pixelwise_tp / (pixelwise_tp + pixelwise_fp) if (pixelwise_tp + pixelwise_fp) else 0
+        pixelwise_recall_per_true_cluster[int(true_label - 1)] = pixelwise_recall
 
-        found_clusters_in_true_cluster = np.unique(clusters[labels == true_label])
-        # Skip the background label (label 0)
-        found_clusters_in_true_cluster = found_clusters_in_true_cluster[
-            found_clusters_in_true_cluster != 0
-        ]
+        n_found_clusters_per_true_cluster = np.sum(clusters_in_true_label > 0)
 
-        n_found_clusters_in_true_cluster.append(found_clusters_in_true_cluster.shape[0])
 
-        is_cluster = np.isin(clusters, found_clusters_in_true_cluster)
+    # Calculating the cluster-wise recall
+    ## How many of the true clusters are found?
+    ## - TP: Count a true cluster as true positive if its pixel-wise recall is greater than t_r.
+    ## - FN: Count a true cluster as false negative if its pixel-wise recall is less than t_r.
+    tp_true_clusters = np.sum(pixelwise_recall_per_true_cluster>=thresh_recall)
+    fn_true_clusters = np.sum(pixelwise_recall_per_true_cluster<thresh_recall)
+    clusterwise_recall = (
+        tp_true_clusters / (tp_true_clusters + fn_true_clusters)
+        if (tp_true_clusters + fn_true_clusters)
+        else 0
+    )
 
+
+    # Calcluating the pixel-wise precision for each found cluster
+    # Initialize, recall for each true cluster
+    precision_per_found_cluster = np.zeros(int(unique_found_clusters.max()), dtype=float)
+
+    # Iterate over each found cluster
+    for found_cluster in unique_found_clusters:
+        
+        # Pixel-wise precision for this found cluster
+        is_found_cluster = clusters == found_cluster
         tp, fp, tn, fn = classification_outcomes(
-            clusters=is_cluster, labels=(labels == true_label), reutrn_counts=True
+            clusters=is_found_cluster, labels=(labels > 0), reutrn_counts=True
         )
-        f1 = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else 0
-        f1_scores.append(f1)
+        pixelwise_precision = tp / (tp + fp) if (tp + fp) else 0
+        precision_per_found_cluster[int(found_cluster-1)] = pixelwise_precision
 
+    # Calculating the cluster-wise precision
+    ## How many of the found clusters are co-located with a true cluster?
+    ## - TP: Count a found cluster as true positive if it's pixel-wise precision is greater than t_p'.
+    ## - FP: Count a found cluster as false positive if it's pixel-wise precision is less than t_p'.
+    ## notice that the TP is not the same as the TP in the recall caclulation
+    tp_found_clusters = np.sum(precision_per_found_cluster>=thresh_precision)
+    fp_found_clusters = np.sum(precision_per_found_cluster<thresh_precision)
+    clusterwise_precision = (
+        tp_found_clusters / (tp_found_clusters + fp_found_clusters)
+        if (tp_found_clusters + fp_found_clusters)
+        else 0
+    )
 
-    n_true_positive_clusters = true_found_clusters.shape[0]
-    n_false_postive_clusters = false_found_clusters.shape[0]
-    n_unique_found_clusters = unique_found_clusters.shape[0]
-    n_false_negative_clusters = np.sum(np.array(f1_scores)==0)
+    # Cluster-wise F1 score
+    clusterwise_f1 = (
+        2 * clusterwise_precision * clusterwise_recall
+        / (clusterwise_precision + clusterwise_recall)
+        if (clusterwise_precision + clusterwise_recall)
+        else 0
+    )
 
-    # F1 score for whole cluster -wise
-    tp = n_true_positive_clusters
-    fp = n_false_postive_clusters
-    fn = n_false_negative_clusters
-    f1_scores_whole_clusters = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else 0
-
-    # Average and median size of each true found cluster
-    true_found_clusters_sizes = [
-        np.sum(clusters == true_found_cluster)
-        for true_found_cluster in true_found_clusters
-    ]
-    mean_true_found_clusters_size = np.mean(true_found_clusters_sizes) if true_found_clusters_sizes else 0
-    median_true_found_clusters_size = np.median(true_found_clusters_sizes) if true_found_clusters_sizes else 0
-
-    # Average and median size of each false found cluster
-    false_found_clusters_sizes = [
-        np.sum(clusters == false_found_cluster)
-        for false_found_cluster in false_found_clusters
-    ]
-    mean_false_found_clusters_size = np.mean(false_found_clusters_sizes) if false_found_clusters_sizes else 0
-    median_false_found_clusters_size = np.median(false_found_clusters_sizes) if false_found_clusters_sizes else 0
-
-
-    # F1 score, precision, and recall in general
+    # Pixel-wise F1 score, precision, and recall in general
     tp, fp, tn, fn = classification_outcomes(
         clusters > 0, labels > 0, reutrn_counts=True
     )
-    f1_general = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else 0
-    precision_general = tp / (tp + fp) if (tp + fp) else 0
-    recall_general = tp / (tp + fn) if (tp + fn) else 0
+    pixelwise_f1_global = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else 0
+    pixelwise_precision_global = tp / (tp + fp) if (tp + fp) else 0
+    pielwise_recall_global = tp / (tp + fn) if (tp + fn) else 0
 
-    percentage_true_found_clusters = n_true_positive_clusters / n_unique_found_clusters if n_unique_found_clusters else 0
 
-    if verbose:
-        print(f"F1 score for whole data: {f1_general:.2f}")
-        print(f"Precision for whole data: {precision_general:.2f}")
-        print(f"Recall for whole data: {recall_general:.2f}")
-        print(f"F1 score for each true cluster: {[f'{x:.2f}' for x in f1_scores]}")
-        print(
-            f"Number of unique found clusters in each true cluster: {n_found_clusters_in_true_cluster}"
-        )
-        print(f"Number of true found clusters: {n_true_positive_clusters}")
-        print(f"Number of false found clusters: {n_false_postive_clusters}")
-        print(f"Percentage of True found clusters: {percentage_true_found_clusters:.2%}")
-        print(
-            f"Size of each true found cluster. Avg: {mean_true_found_clusters_size:.2f}, Median: {median_true_found_clusters_size:.2f}"
-        )
-        print(
-            f"Size of each false found cluster. Avg: {mean_false_found_clusters_size:.2f}, Median: {median_false_found_clusters_size:.2f}"
-        )
+    # Average and median size of each true found cluster
+    #TODO?
+    """
+    true_found_clusters_sizes = [
+        np.sum(clusters == true_found_cluster)
+        for true_found_cluster in tp_clusters
+    ]
+    mean_true_positive_clusters_size = np.mean(true_found_clusters_sizes) if true_found_clusters_sizes else 0
+    median_true_positive_clusters_size = np.median(true_found_clusters_sizes) if true_found_clusters_sizes else 0
+    """
 
-    return (
-        f1_general,
-        precision_general,
-        recall_general,
-        f1_scores,
-        n_found_clusters_in_true_cluster,
-        n_true_positive_clusters,
-        n_false_postive_clusters,
-        n_false_negative_clusters,
-        f1_scores_whole_clusters,
-        mean_true_found_clusters_size,
-        median_true_found_clusters_size,
-        mean_false_found_clusters_size,
-        median_false_found_clusters_size,
-    )
+    # Average and median size of each false found cluster
+    #TODO?
+    """
+    false_found_clusters_sizes = [
+        np.sum(clusters == false_found_cluster)
+        for false_found_cluster in fp_clusters
+    ]
+    mean_false_positive_clusters_size = np.mean(false_found_clusters_sizes) if false_found_clusters_sizes else 0
+    median_false_positive_clusters_size = np.median(false_found_clusters_sizes) if false_found_clusters_sizes else 0
+    """
+
+
+
+    #if verbose: TODO
+        #print(f"F1 score for whole data: {pixelwise_f1_global:.2f}")
+        #print(f"Precision for whole data: {pixelwise_precision_global:.2f}")
+        #print(f"Recall for whole data: {pielwise_recall_global:.2f}")
+        #print(f"F1 score for each true cluster: {[f'{x:.2f}' for x in pixelwise_recall_per_true_cluster]}")
+        
+        #print(
+        #    f"Number of unique found clusters in each true cluster: {n_found_clusters_in_true_cluster}"
+        #)
+        #print(f"Number of true found clusters: {n_tp_clusters}")
+        #print(f"Number of false found clusters: {n_fp_clusters}")
+        #print(f"Percentage of True found clusters: {percentage_true_found_clusters:.2%}")
+        #print(
+        #    f"Size of each true found cluster. Avg: {mean_true_positive_clusters_size:.2f}, Median: {median_true_positive_clusters_size:.2f}"
+        #)
+        #print(
+        #    f"Size of each false found cluster. Avg: {mean_false_positive_clusters_size:.2f}, Median: {median_false_positive_clusters_size:.2f}"
+        #)
+    
+    return {
+        "pixelwise_f1_global": pixelwise_f1_global,
+        "pixelwise_precision_global": pixelwise_precision_global,
+        "pielwise_recall_global": pielwise_recall_global,
+        "pixelwise_recall_per_true_cluster": pixelwise_recall_per_true_cluster,
+        "pixelwise_precision_per_found_cluster": precision_per_found_cluster,
+        "clusterwise_precision": clusterwise_precision,
+        "clusterwise_recall": clusterwise_recall,   
+        "clusterwise_f1": clusterwise_f1,
+        "n_found_clusters_in_true_cluster": n_found_clusters_per_true_cluster,
+    }
+
+
+
+
 
 def plot_clusters(points, values, clusters, labels, **kwargs):
     """
@@ -469,21 +509,23 @@ def plot_clusters_multicluster(points, values, clusters, labels, **kwargs):
     # Compute classification outcomes.
     is_tp, is_fp, is_tn, is_fn = classification_outcomes(clusters, labels)
 
-    (
-        f1_general,
-        precision_general,
-        recall_general,
-        f1_scores,
-        n_found_clusters_in_true_cluster,
-        n_true_found_clusters,
-        n_false_found_clusters,
-        n_false_negative_clusters,
-        f1_scores_whole_clusters,
-        mean_true_found_clusters_size,
-        median_true_found_clusters_size,
-        mean_false_found_clusters_size,
-        median_false_found_clusters_size,
-    ) = calculate_metrics_for_multiclusters(clusters, labels, verbose=False)
+    metrics_dict = calculate_metrics_for_multiclusters(clusters, labels, verbose=False)
+
+    f1_general = metrics_dict["f1_general"]
+    precision_general = metrics_dict["precision_general"]
+    recall_general = metrics_dict["recall_general"]
+    f1_scores = metrics_dict["f1_scores"]
+    n_found_clusters_in_true_cluster = metrics_dict["n_found_clusters_in_true_cluster"]
+    n_true_found_clusters = metrics_dict["n_true_found_clusters"]
+    n_false_found_clusters = metrics_dict["n_false_found_clusters"]
+    n_false_negative_clusters = metrics_dict["n_false_negative_clusters"]
+    f1_scores_whole_clusters = metrics_dict["f1_scores_whole_clusters"]
+    mean_true_positive_clusters_size_array = metrics_dict["mean_true_positive_clusters_size_array"]
+    median_true_positive_clusters_size = metrics_dict["median_true_positive_clusters_size"]
+    mean_false_positive_clusters_size = metrics_dict["mean_false_positive_clusters_size"]
+    median_false_positive_clusters_size = metrics_dict["median_false_positive_clusters_size"]
+
+
 
     # Populate classification outcomes image:
     # 1 = True Positive, 2 = False Positive, 3 = False Negative.
@@ -561,8 +603,8 @@ def plot_clusters_multicluster(points, values, clusters, labels, **kwargs):
         f"N. clusters not in true areas: {n_false_found_clusters}\n"
         f"N. clusters not found: {n_false_negative_clusters}\n"
         f"F1 cluster-wise: {f1_scores_whole_clusters:.2f}\n"
-        f"True cluster size: mean: {mean_true_found_clusters_size:.1f}, median: {median_true_found_clusters_size:.1f}\n"
-        f"False cluster size: mean: {mean_false_found_clusters_size:.1f}, median: {median_false_found_clusters_size:.1f}"
+        f"True cluster size: mean: {mean_true_positive_clusters_size_array:.1f}, median: {median_true_positive_clusters_size:.1f}\n"
+        f"False cluster size: mean: {mean_false_positive_clusters_size:.1f}, median: {median_false_positive_clusters_size:.1f}"
     )
     props = dict(boxstyle="round", facecolor="white", alpha=0.5)
     axs[2].text(
