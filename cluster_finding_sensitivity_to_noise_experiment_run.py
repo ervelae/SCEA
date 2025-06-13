@@ -15,9 +15,9 @@ It runs the experiment in parallel using ProcessPoolExecutor.
 # Parameters
 # =====================================
 radius_func_sigmas_threshold = 0.5
-noise_levels = np.arange(0, 2.1, 1)  # Standard deviations of the noise
-n_repetitions_per_noise_level = 6
-stds = np.arange(3, 5.1, 1)
+noise_levels = np.arange(0, 8.1, 0.1)  # Standard deviations of the noise
+n_repetitions_per_noise_level = 16
+stds = np.arange(2.5, 5.3, 0.1)
 data_set = "linear_polar"
 
 # ==================================
@@ -30,13 +30,14 @@ OUTPUT_PATH = Path("/Users/eliaserv/Documents/VSCode_projects/SCEA/outputs")
 #plots_path = Path("/Users/eliaserv/Documents/VSCode_projects/SCEA/plots")
 """
 
-OUTPUT_PATH = Path("/scratch/project_2008159/eliaserv/SMARTCARB/outputs")
-SCRIPTS_PATH = Path("/projappl/project_2008159/eliaserv")
+OUTPUT_PATH = Path("/scratch/project_2008159/eliaserv/multicluster_experiment/outputs")
+SCRIPTS_PATH = "/projappl/project_2008159/eliaserv"
 
-output_filename_appendix = "_test"
+output_filename_appendix = ""
 
 filename = (
     "scores_per_stds_noise"
+    + "_"
     + data_set
     + "_"
     + str(radius_func_sigmas_threshold)
@@ -46,7 +47,7 @@ filename = (
     + ".npz"
 )
 
-sys.path.append(SCRIPTS_PATH)
+#sys.path.append(SCRIPTS_PATH)
 from helper_functions import calculate_metrics_for_multiclusters
 import SCEA
 
@@ -99,7 +100,8 @@ def _one_replication(args):
     points, values, labels, noise_sigma, std, radius_thr, rep_i = args
 
     # make this rep’s noisy values
-    vals_noisy = values + np.random.normal(0, noise_sigma, size=values.shape)
+    rng = np.random.default_rng()  # Automatically uses entropy source
+    vals_noisy = values + rng.normal(0, noise_sigma, size=values.shape)
     # run the core experiment
     metrics = single_experiment(points, vals_noisy, labels, std, radius_thr)
     return metrics  # it’s a dict
@@ -181,6 +183,31 @@ def single_experiment_with_repetitions(
         median_false_positive_clusters_size_array.mean()
     )
 
+    # Standard deviation of the metrics
+    f1_general_std = f1_general_array.std()
+    precision_general_std = precision_general_array.std()
+    recall_general_std = recall_general_array.std()
+    f1_scores_std = f1_scores_array.std(axis=0)
+    n_unique_found_clusters_in_true_cluster_std = (
+        n_unique_found_clusters_in_true_cluster_array.std()
+    )
+    n_true_positive_clusters_std = n_true_positive_clusters_array.std()
+    n_false_positive_clusters_std = n_false_positive_clusters_array.std()
+    n_false_negative_clusters_std = n_false_negative_clusters_array.std()
+    f1_scores_whole_clusters_std = f1_scores_whole_clusters_array.std()
+    mean_true_positive_clusters_size_std = (
+        mean_true_positive_clusters_size_array.std()
+    )
+    median_true_positive_clusters_size_std = (
+        median_true_positive_clusters_size_array.std()
+    )
+    mean_false_positive_clusters_size_std = (
+        mean_false_positive_clusters_size_array.std()
+    )
+    median_false_positive_clusters_size_std = (
+        median_false_positive_clusters_size_array.std()
+    )
+
     return (
         f1_general,
         precision_general,
@@ -195,6 +222,19 @@ def single_experiment_with_repetitions(
         median_true_positive_clusters_size,
         mean_false_positive_clusters_size,
         median_false_positive_clusters_size,
+        f1_general_std,
+        precision_general_std,
+        recall_general_std,
+        f1_scores_std,
+        n_unique_found_clusters_in_true_cluster_std,
+        n_true_positive_clusters_std,
+        n_false_positive_clusters_std,
+        n_false_negative_clusters_std,
+        f1_scores_whole_clusters_std,
+        mean_true_positive_clusters_size_std,
+        median_true_positive_clusters_size_std,
+        mean_false_positive_clusters_size_std,
+        median_false_positive_clusters_size_std,
     )
 
 
@@ -308,8 +348,43 @@ if __name__ == "__main__":
     mean_false_positive_clusters_size_array = np.zeros((len(stds), len(noise_levels)))
     median_false_positive_clusters_size_array = np.zeros((len(stds), len(noise_levels)))
 
+    # Initialize standard deviation arrays
+    f1_general_std_array = np.zeros((len(stds), len(noise_levels)))
+    precision_general_std_array = np.zeros((len(stds), len(noise_levels)))
+    recall_general_std_array = np.zeros((len(stds), len(noise_levels)))
+    f1_scores_std_array = np.zeros(
+        (len(stds), len(noise_levels), len(np.unique(labels)) - 1)
+    )  # 3D array
+    n_unique_found_clusters_in_true_cluster_std_array = np.zeros(
+        (len(stds), len(noise_levels), len(np.unique(labels)) - 1)
+    )
+    n_true_positive_clusters_std_array = np.zeros((len(stds), len(noise_levels)))
+    n_false_positive_clusters_std_array = np.zeros((len(stds), len(noise_levels)))
+    n_false_negative_clusters_std_array = np.zeros((len(stds), len(noise_levels)))
+    f1_scores_whole_clusters_std_array = np.zeros((len(stds), len(noise_levels)))
+    mean_true_positive_clusters_size_std_array = np.zeros(
+        (len(stds), len(noise_levels))
+    )
+    median_true_positive_clusters_size_std_array = np.zeros(
+        (len(stds), len(noise_levels))
+    )
+    mean_false_positive_clusters_size_std_array = np.zeros(
+        (len(stds), len(noise_levels))
+    )
+    median_false_positive_clusters_size_std_array = np.zeros(
+        (len(stds), len(noise_levels))
+    )
+
     # Iterate over the parameter std
-    for i, std in enumerate(tqdm(stds)):
+    for i, std in enumerate(tqdm(stds, 
+            mininterval=10,
+            maxinterval=120,
+            ncols=80,
+            ascii=True,
+            dynamic_ncols=False,
+            bar_format="{l_bar}{bar}{r_bar}\n",
+            leave=True,
+        )):
         tqdm.write(f"Processing std = {std}")
 
         # Iterate over noise levels
@@ -331,6 +406,19 @@ if __name__ == "__main__":
                 median_true_positive_clusters_size,
                 mean_false_positive_clusters_size,
                 median_false_positive_clusters_size,
+                f1_general_std,
+                precision_general_std,
+                recall_general_std,
+                f1_scores_std,
+                n_unique_found_clusters_in_true_cluster_std,
+                n_true_positive_clusters_std,
+                n_false_positive_clusters_std,
+                n_false_negative_clusters_std,
+                f1_scores_whole_clusters_std,
+                mean_true_positive_clusters_size_std,
+                median_true_positive_clusters_size_std,
+                mean_false_positive_clusters_size_std,
+                median_false_positive_clusters_size_std,
             ) = single_experiment_with_repetitions(
                 points,
                 values_standardized,
@@ -367,6 +455,32 @@ if __name__ == "__main__":
                 median_false_positive_clusters_size
             )
 
+            # Store the standard deviations for this run
+            f1_general_std_array[i, j] = f1_general_std
+            precision_general_std_array[i, j] = precision_general_std
+            recall_general_std_array[i, j] = recall_general_std
+            f1_scores_std_array[i, j] = f1_scores_std
+            n_unique_found_clusters_in_true_cluster_std_array[i, j] = (
+                n_unique_found_clusters_in_true_cluster_std
+            )
+            n_true_positive_clusters_std_array[i, j] = n_true_positive_clusters_std
+            n_false_positive_clusters_std_array[i, j] = n_false_positive_clusters_std
+            n_false_negative_clusters_std_array[i, j] = n_false_negative_clusters_std
+            f1_scores_whole_clusters_std_array[i, j] = f1_scores_whole_clusters_std
+            mean_true_positive_clusters_size_std_array[i, j] = (
+                mean_true_positive_clusters_size_std
+            )
+            median_true_positive_clusters_size_std_array[i, j] = (
+                median_true_positive_clusters_size_std
+            )
+            mean_false_positive_clusters_size_std_array[i, j] = (
+                mean_false_positive_clusters_size_std
+            )
+            median_false_positive_clusters_size_std_array[i, j] = (
+                median_false_positive_clusters_size_std
+            )
+                
+
     # Save the results
     results = {
         "f1_general": f1_general_array,
@@ -382,6 +496,19 @@ if __name__ == "__main__":
         "median_true_positive_clusters_size": median_true_positive_clusters_size_array,
         "mean_false_positive_clusters_size": mean_false_positive_clusters_size_array,
         "median_false_positive_clusters_size": median_false_positive_clusters_size_array,
+        "f1_general_std": f1_general_std_array,
+        "precision_general_std": precision_general_std_array,
+        "recall_general_std": recall_general_std_array,
+        "f1_scores_std": f1_scores_std_array,
+        "n_unique_found_clusters_in_true_cluster_std": n_unique_found_clusters_in_true_cluster_std_array,
+        "n_true_positive_clusters_std": n_true_positive_clusters_std_array,
+        "n_false_positive_clusters_std": n_false_positive_clusters_std_array,
+        "n_false_negative_clusters_std": n_false_negative_clusters_std_array,
+        "f1_scores_whole_clusters_std": f1_scores_whole_clusters_std_array,
+        "mean_true_positive_clusters_size_std": mean_true_positive_clusters_size_std_array,
+        "median_true_positive_clusters_size_std": median_true_positive_clusters_size_std_array,
+        "mean_false_positive_clusters_size_std": mean_false_positive_clusters_size_std_array,
+        "median_false_positive_clusters_size_std": median_false_positive_clusters_size_std_array,
         "stds": stds,
         "noise_levels": noise_levels,
         "n_repetitions_per_noise_level": n_repetitions_per_noise_level,
