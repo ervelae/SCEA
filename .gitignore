@@ -4,6 +4,8 @@ plots/
 plume_detection_comparisons_data/
 SMARTCARB_plumes_with_SCEA/
 data/
+.s3cfg
+*.nc
 
 
 # Byte-compiled / optimized / DLL files
