@@ -8,8 +8,8 @@ from sklearn.metrics.pairwise import haversine_distances
 
 
 def scea(
-    points,
-    point_value,
+    point_coordinates,
+    point_values,
     growth_limit=2,
     detection_limit=3.5,
     radius_func="default",
@@ -79,18 +79,18 @@ def scea(
     # Basic checks
     if (not isinstance(n_clusters, int)) and (not n_clusters == "auto"):
         raise Exception("n_clusters not valid")
-    if np.isnan(point_value).sum() > 0:
+    if np.isnan(point_values).sum() > 0:
         raise Exception("point_value has nan values")
-    if len(points) == 0:
+    if len(point_coordinates) < 2:
         raise Exception("Size must be larger than 1")
-    if len(points) != len(point_value):
+    if len(point_coordinates) != len(point_values):
         raise Exception("points and point_value length must be the same")
 
     # Initialize arrays
-    not_clustered = np.ones(len(point_value), dtype=bool)
-    not_clustered_indexes = np.arange(len(point_value))
+    not_clustered = np.ones(len(point_values), dtype=bool)
+    not_clustered_indexes = np.arange(len(point_values))
     clusters = np.zeros(
-        len(point_value)
+        len(point_values)
     )  # 0 = no cluster, otherwise the index of the cluster
 
     # Set threshold for automatic stopping condition
@@ -98,7 +98,7 @@ def scea(
         if point_value_threshold == "stds_from_mean":
             point_value_standardised = (
                 preprocessing.StandardScaler()
-                .fit_transform(point_value.reshape(-1, 1))
+                .fit_transform(point_values.reshape(-1, 1))
                 .flatten()
             )
             point_value_standardised[point_value_standardised < detection_limit] = np.inf
@@ -111,13 +111,13 @@ def scea(
                         % detection_limit
                     )
                 return clusters
-            point_value_threshold = point_value[np.argmin(point_value_standardised)]
+            point_value_threshold = point_values[np.argmin(point_value_standardised)]
             if verbose:
                 print("threshold value:", point_value_threshold)
 
         elif point_value_threshold == "stds_from_median":
-            median, std = np.median(point_value), np.std(point_value)
-            point_value_standardised = (point_value - median) / std
+            median, std = np.median(point_values), np.std(point_values)
+            point_value_standardised = (point_values - median) / std
             point_value_standardised[point_value_standardised < detection_limit] = np.inf
             if np.isinf(point_value_standardised).sum() == len(
                 point_value_standardised
@@ -128,14 +128,14 @@ def scea(
                         % detection_limit
                     )
                 return clusters
-            point_value_threshold = point_value[np.argmin(point_value_standardised)]
+            point_value_threshold = point_values[np.argmin(point_value_standardised)]
     else:
         point_value_threshold = -np.inf
 
     i = 0
     while True:
-        points_not_clustered = points[not_clustered]
-        point_value_not_clustered = point_value[not_clustered]
+        points_not_clustered = point_coordinates[not_clustered]
+        point_value_not_clustered = point_values[not_clustered]
 
         # Check stopping condition
         if isinstance(n_clusters, int) and i == n_clusters:
