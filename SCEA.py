@@ -10,17 +10,17 @@ from sklearn.metrics.pairwise import haversine_distances
 def scea(
     points,
     point_value,
+    growth_limit=2,
+    detection_limit=3.5,
     radius_func="default",
     n_clusters="auto",
     point_value_threshold="stds_from_median",
-    stds=4,
     distance_matrix="euclidean",
-    radius_func_sigmas_threshold=2,
-    max_points_in_start_radius=8,
+    max_points_in_start_radius=7,
     local_box_size=0,
     verbose=True,
 ):
-    """v3.1
+    """
     Finds n clusters.
 
     It starts the clustering with the maximum point.
@@ -42,31 +42,32 @@ def scea(
     point_value : array of shape (n,)
         Values for every point. This gets fed in to the radius function.
     radius_func : lambda function or 'default'
-        default: f(x) = np.min([1 + x - radius_func_sigmas_threshold , 2]).
+        default: f(x) = np.min([1 + x - growth_limit , 2]).
         The radius func values that give values less than 1 dont capture new points,
          since the starting radius is equal to the distance of closest point not in the cluster
          and that radius gets multiplied by this functions output
     n_clusters : int, 'auto'
-        auto: automatically stop when the threshold (determined by point_value_therhold and stds) has been met
+        int: Number of clusters to find. Detection_limit -parameter is ignored.
+        "auto": automatically stop when the threshold has been met (determined by detection_limit)
     point_value_threshold : 'stds_from_median', 'stds_from_mean', float
-        stds_from_median: median value gets moved to 0 and standar devation to 1, and after that finds the value stds away from zero
+        float: threshold value for stopping condition of new clusters. Detection_limit -parameter is ignored.
+        stds_from_median: median value gets moved to 0 and standard deviation to 1, and after that finds the value "detection_limit" away from zero
         stds_from_mean: same but mean gets moved to 0
-    stds : float
+    detection_limit : float
         How many standard deviations away the stopping condition of new clusters threshold is.
-        Stds stands for standard deviations. Not to be confused with sexually transmitted diseases.
     distance_matrix : 'euclidean', 'haversine', array of shape(n,n)
-        euclidean: The intuitive distance
-        haversine: Distance on the surface of a ball. Here it its on the ball thats the size of the earth. So distance on earth approximately
-    radius_func_sigmas_threshold : float
+        euclidean: The natural Euclidean distance
+        haversine: Distance on the surface of a ball. Here it its on the ball thats the size of the earth. So distance on earth approximately.
+    growth_limit : float
         Parameter in the default radius_func.
         Since the point_values get standardised before using the function this value can be interperted as being
          the threshold value x standard deviations away where values bigger than this threshold capture neighbouring points.
     max_points_in_start_radius : int
-        How many already clustered points can be in the starting radius of a 'radiating' point.
+        How many already clustered points can be in the starting radius of a 'radiating' point before it stops radiating.
     local_box_size : float
-        How large of an area around the maximum points gets concidered.
+        How large of an area around the maximum points gets considered. If 0, all points are considered.
     verbose : boolean
-        If True, it prints info. If False, then its mouth gets shut.
+        If True, it prints info.
 
     Returns:
     -------
@@ -100,14 +101,14 @@ def scea(
                 .fit_transform(point_value.reshape(-1, 1))
                 .flatten()
             )
-            point_value_standardised[point_value_standardised < stds] = np.inf
+            point_value_standardised[point_value_standardised < detection_limit] = np.inf
             if np.isinf(point_value_standardised).sum() == len(
                 point_value_standardised
             ):
                 if verbose:
                     print(
-                        "No clusters found. All points are too close to the mean. Consider lowering stds. Currently stds=%i."
-                        % stds
+                        "No clusters found. All points are too close to the mean. Consider lowering detection_limit=%i."
+                        % detection_limit
                     )
                 return clusters
             point_value_threshold = point_value[np.argmin(point_value_standardised)]
@@ -117,14 +118,14 @@ def scea(
         elif point_value_threshold == "stds_from_median":
             median, std = np.median(point_value), np.std(point_value)
             point_value_standardised = (point_value - median) / std
-            point_value_standardised[point_value_standardised < stds] = np.inf
+            point_value_standardised[point_value_standardised < detection_limit] = np.inf
             if np.isinf(point_value_standardised).sum() == len(
                 point_value_standardised
             ):
                 if verbose:
                     print(
-                        "No clusters found. All points are too close to the mean. Consider lowering stds. Currently stds=%i."
-                        % stds
+                        "No clusters found. All points are too close to the mean. Consider lowering detection_limit=%i."
+                        % detection_limit
                     )
                 return clusters
             point_value_threshold = point_value[np.argmin(point_value_standardised)]
@@ -173,7 +174,7 @@ def scea(
             local_points,
             local_point_value,
             radius_func,
-            radius_func_sigmas_threshold,
+            growth_limit,
             distance_matrix,
             max_points_in_start_radius,
         )
@@ -195,7 +196,7 @@ def find_one_cluster_v31(
     points,
     point_value,
     radius_func="default",
-    radius_func_sigmas_threshold=2,
+    growth_limit=2,
     distance_matrix="euclidean",
     max_points_in_start_radius=5,
     preprocessor="Standard",
@@ -206,7 +207,7 @@ def find_one_cluster_v31(
     """
 
     if radius_func == "default":
-        radius_func = lambda x: np.min([1 + x - radius_func_sigmas_threshold, 2])
+        radius_func = lambda x: np.min([1 + x - growth_limit, 2])
 
     # Preprocessing
     if preprocessor == "Standard":
