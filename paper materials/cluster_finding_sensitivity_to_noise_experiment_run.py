@@ -79,7 +79,7 @@ def single_experiment(
     """
 
     # Cluster
-    clusters = SCEA.scea(
+    clusters = SCEA.SCEA(
         points,
         values,
         radius_func="default",
