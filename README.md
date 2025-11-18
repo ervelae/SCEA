@@ -19,14 +19,18 @@ Paper available at: TBA
   <figcaption>Figure 2 — Demonstrations of SCEA with toy data. The bottom row shows clusters detected from the corresponding top row. Points belonging to the same clusters are denoted with the same color..</figcaption>
 </figure>
 
+<br>
+
 <figure>
   <img src="figures/fig3.png" alt="Figure 1" width="600" />
   <figcaption>Figure 3 — More demonstrations of SCEA on toy datasets. The detection limit was set to 3.5 and the growth limit was set to 1.0. </figcaption>
 </figure>
 
+<br>
+
 <figure>
   <img src="figures/fig4.png" alt="Figure 1" width="800" />
-  <figcaption>Figure 4. — SCEA used as a plume detection method on two different scenes, with bottom row showing the results from the corrseponding top row. Data from different scenes of Sentinel-5P TROPOMI NO$_2$ instrument on dates 2024-06-12 and 2024-06-05 for Fig. (a) and Fig. (b), respectively. Quality filter of 70 \% was used. Detection limit was set to 3.5 and growth limit was to 2.2 to both scenes.</figcaption>
+  <figcaption>Figure 4. — SCEA used as a plume detection method on two different scenes, with bottom row showing the results from the corrseponding top row. Data from different scenes of Sentinel-5P TROPOMI NO2 instrument on dates 2024-06-12 and 2024-06-05 for Fig. (a) and Fig. (b), respectively. Quality filter of 70% was used. Detection limit was set to 3.5 and growth limit was to 2.2 to both scenes.</figcaption>
 </figure>
 
 
@@ -63,7 +67,3 @@ where arguments are as follows:
 | max_points_in_start_radius| Condition for killing a "radiating point" (max points allowed in start radius)                              |
 | local_box_size            | Local area size considered (0 = global)                                                                      |
 | verbose                   | If true, print log information                                                                                |
-
-
-
-[Download Figure 1 (PDF)](figures/fig3.pdf)
