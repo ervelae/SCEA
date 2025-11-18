@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import haversine_distances
 # ===============================================================================
 
 
-def scea(
+def SCEA(
     point_coordinates,
     point_values,
     growth_limit=2,
@@ -107,7 +107,7 @@ def scea(
             ):
                 if verbose:
                     print(
-                        "No clusters found. All points are too close to the mean. Consider lowering detection_limit=%i."
+                        "No clusters found. Consider lowering detection_limit=%f."
                         % detection_limit
                     )
                 return clusters
@@ -124,7 +124,7 @@ def scea(
             ):
                 if verbose:
                     print(
-                        "No clusters found. All points are too close to the mean. Consider lowering detection_limit=%i."
+                        "No clusters found. Consider lowering detection_limit=%f."
                         % detection_limit
                     )
                 return clusters
@@ -198,7 +198,7 @@ def find_one_cluster_v31(
     radius_func="default",
     growth_limit=2,
     distance_matrix="euclidean",
-    max_points_in_start_radius=5,
+    max_points_in_start_radius=7,
     preprocessor="Standard",
 ):
     """
@@ -238,7 +238,7 @@ def find_one_cluster_v31(
                 haversine_distances(np.radians(points)) * 6371000 / 1000
             )  # multiply by Earth radius to get kilometers
         else:
-            raise Exception("What is this metric? :DD")
+            raise Exception("Unknown distance_matrix option")
 
     # Initialize cluster
     cluster = np.zeros(len(points), dtype=bool)
